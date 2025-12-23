@@ -8,129 +8,217 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #F8FAFC; color: #1E293B; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #F8FAFC; color: #1E293B; overflow-x: hidden; }
         .hero-title { background: linear-gradient(to right, #003B5C, #00A19D); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .step-card { background: white; padding: 2rem; border-radius: 2rem; border: 1px solid #e2e8f0; text-align: center; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+        .cv-page { width: 210mm; min-height: 297mm; background: white; margin: 0 auto; box-shadow: 0 0 50px rgba(0,0,0,0.1); padding: 20mm; position: relative; }
+        .template-card { cursor: pointer; transition: all 0.3s ease; border: 3px solid transparent; }
+        .template-card.active { border-color: #00A19D; transform: translateY(-5px); }
+        .loading-bar { height: 4px; background: #00A19D; animation: loading 2s infinite; }
+        @keyframes loading { 0% { width: 0%; } 50% { width: 100%; } 100% { width: 0%; } }
+        @media print { .no-print { display: none; } .cv-page { box-shadow: none; margin: 0; padding: 0; } }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState } = React;
+        const { useState, useRef } = React;
+
+        const API_KEY = "AIzaSyD3qnYqH6PLM2xd_QBqebFnqoIKfsQRLtg";
+        const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
         const App = () => {
             const [cvFile, setCvFile] = useState(null);
             const [profilePic, setProfilePic] = useState(null);
             const [jdUrl, setJdUrl] = useState('');
             const [jdText, setJdText] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [result, setResult] = useState(null);
+            const [activeTab, setActiveTab] = useState('cv'); // 'cv' o 'letter'
+            const [template, setTemplate] = useState('modern'); // 'classic', 'modern', 'elegant'
+            
+            const docRef = useRef(null);
 
+            const handleOptimize = async () => {
+                if (!cvFile || (!jdText && !jdUrl)) return alert("Carica il CV e inserisci la Job Description!");
+                setLoading(true);
+
+                const reader = new FileReader();
+                reader.readAsDataURL(cvFile);
+                reader.onloadend = async () => {
+                    const base64Data = reader.result.split(',')[1];
+                    const prompt = `Analizza questo CV e questa Job Description. 
+                    1. Ottimizza il CV per superare i filtri ATS (usa keyword rilevanti).
+                    2. Scrivi una Lettera di Presentazione persuasiva.
+                    Restituisci ESCLUSIVAMENTE un JSON con questa struttura:
+                    {
+                        "optimizedCv": { "name": "", "role": "", "email": "", "phone": "", "summary": "", "experience": [{"company": "", "pos": "", "date": "", "desc": []}], "skills": [] },
+                        "coverLetter": "",
+                        "score": 85
+                    }`;
+
+                    try {
+                        const response = await fetch(GEMINI_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [
+                                    { inlineData: { mimeType: cvFile.type, data: base64Data } },
+                                    { text: prompt }
+                                ]}],
+                                generationConfig: { responseMimeType: "application/json" }
+                            })
+                        });
+                        const data = await response.json();
+                        const cleanJson = data.candidates[0].content.parts[0].text;
+                        setResult(JSON.parse(cleanJson));
+                    } catch (e) {
+                        alert("Errore nell'elaborazione. Riprova.");
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+            };
+
+            const downloadPDF = async () => {
+                const canvas = await html2canvas(docRef.current, { scale: 2 });
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+                pdf.addImage(imgData, 'PNG', 0, 0, 210, 297);
+                pdf.save(`AdaptMyCV_${activeTab}.pdf`);
+            };
+
+            // Schermata Risultati
+            if (result) {
+                return (
+                    <div className="min-h-screen bg-slate-100 pb-20">
+                        <nav className="no-print bg-white p-4 border-b flex justify-between items-center px-10 sticky top-0 z-50">
+                            <div className="font-black text-[#003B5C]">ADAPT <span className="text-[#00A19D]">MY CV</span></div>
+                            <div className="flex gap-4">
+                                <button onClick={() => setActiveTab('cv')} className={`px-4 py-2 rounded-full font-bold text-sm ${activeTab === 'cv' ? 'bg-[#003B5C] text-white' : 'text-slate-400'}`}>CV Ottimizzato</button>
+                                <button onClick={() => setActiveTab('letter')} className={`px-4 py-2 rounded-full font-bold text-sm ${activeTab === 'letter' ? 'bg-[#003B5C] text-white' : 'text-slate-400'}`}>Lettera Presentazione</button>
+                            </div>
+                            <button onClick={downloadPDF} className="bg-[#00A19D] text-white px-6 py-2 rounded-full font-bold text-sm uppercase">Scarica PDF</button>
+                        </nav>
+
+                        <div className="max-w-6xl mx-auto mt-10 flex flex-col lg:flex-row gap-10">
+                            {/* Selettore Template */}
+                            <div className="no-print lg:w-64 space-y-6">
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border text-center">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ATS Score</p>
+                                    <div className="text-4xl font-black text-[#003B5C] mt-1">{result.score}%</div>
+                                </div>
+                                <h3 className="font-black text-xs uppercase text-slate-500 ml-2">Scegli Design</h3>
+                                <div className="space-y-4">
+                                    {['modern', 'classic', 'elegant'].map(t => (
+                                        <div key={t} onClick={() => setTemplate(t)} className={`template-card p-4 bg-white rounded-2xl shadow-sm capitalize font-bold text-sm ${template === t ? 'active' : ''}`}>
+                                            Template {t}
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={() => setResult(null)} className="w-full text-slate-400 font-bold text-xs uppercase pt-10">← Ricomincia</button>
+                            </div>
+
+                            {/* Anteprima Documento */}
+                            <div ref={docRef} className={`cv-page ${template === 'elegant' ? 'font-serif' : ''}`}>
+                                {activeTab === 'cv' ? (
+                                    <div>
+                                        <div className={`flex items-center gap-6 border-b-2 pb-8 mb-8 ${template === 'classic' ? 'flex-row-reverse text-right' : ''}`}>
+                                            {profilePic && <img src={profilePic} className="w-32 h-32 rounded-full object-cover grayscale" />}
+                                            <div className="flex-1">
+                                                <h1 className="text-4xl font-black uppercase text-slate-900 leading-none">{result.optimizedCv.name}</h1>
+                                                <p className="text-[#00A19D] font-bold text-xl mt-1 uppercase tracking-tighter">{result.optimizedCv.role}</p>
+                                                <div className="text-[10px] text-slate-400 mt-4 flex gap-4 font-bold uppercase">
+                                                    <span>{result.optimizedCv.email}</span> • <span>{result.optimizedCv.phone}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-8">
+                                            <section>
+                                                <h2 className="font-black text-xs uppercase text-[#003B5C] mb-3 tracking-[0.2em]">Profilo</h2>
+                                                <p className="text-sm leading-relaxed text-slate-700">{result.optimizedCv.summary}</p>
+                                            </section>
+                                            <section>
+                                                <h2 className="font-black text-xs uppercase text-[#003B5C] mb-4 tracking-[0.2em]">Esperienza Lavorativa</h2>
+                                                {result.optimizedCv.experience.map((exp, i) => (
+                                                    <div key={i} className="mb-6">
+                                                        <div className="flex justify-between items-baseline">
+                                                            <h3 className="font-bold text-base text-slate-900">{exp.pos} @ {exp.company}</h3>
+                                                            <span className="text-xs font-bold text-slate-400">{exp.date}</span>
+                                                        </div>
+                                                        <ul className="list-disc ml-5 mt-2 text-sm text-slate-600 space-y-1">
+                                                            {exp.desc.map((d, j) => <li key={j}>{d}</li>)}
+                                                        </ul>
+                                                    </div>
+                                                ))}
+                                            </section>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="p-10">
+                                        <p className="text-right text-sm mb-10 text-slate-400">{new Date().toLocaleDateString('it-IT')}</p>
+                                        <h2 className="text-2xl font-black mb-8 text-[#003B5C]">Lettera di Presentazione</h2>
+                                        <div className="text-slate-700 leading-relaxed whitespace-pre-line text-base">
+                                            {result.coverLetter}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Schermata Home (Landing + Form)
             return (
-                <div className="min-h-screen pb-20">
-                    {/* NAVBAR */}
-                    <nav className="p-4 flex justify-between items-center px-6 lg:px-20 border-b bg-white/80 backdrop-blur-md sticky top-0 z-50">
+                <div className="min-h-screen">
+                    <nav className="p-6 flex justify-between items-center lg:px-20 border-b bg-white">
                         <div className="flex items-center gap-2">
                             <div className="w-8 h-8 border-2 border-[#003B5C] rounded flex items-center justify-center font-bold text-[#003B5C]">A</div>
-                            <span className="font-black text-[#003B5C] tracking-tighter uppercase">Adapt <span className="text-[#00A19D]">My CV</span></span>
+                            <span className="font-black text-[#003B5C] uppercase tracking-tighter text-xl">Adapt <span className="text-[#00A19D]">My CV</span></span>
                         </div>
                     </nav>
 
-                    <main className="container mx-auto px-4 mt-16 max-w-5xl">
-                        {/* HEADER COMPLETO */}
-                        <div className="text-center mb-16">
-                            <h2 className="hero-title text-5xl lg:text-7xl font-black mb-6 tracking-tighter leading-tight">
-                                Batti l'algoritmo.<br/>Conquista il recruiter.
-                            </h2>
-                            <p className="text-slate-500 text-lg lg:text-xl max-w-3xl mx-auto leading-relaxed">
-                                Il 75% dei CV viene scartato dai filtri ATS prima di essere visto da un umano. 
-                                La nostra AI ottimizza il tuo CV per ogni annuncio a cui desideri candidarti 
-                                in tempo reale per garantirti il massimo della visibilità.
+                    <main className="container mx-auto px-4 mt-20 max-w-5xl">
+                        <div className="text-center mb-20">
+                            <h2 className="hero-title text-6xl lg:text-8xl font-black mb-6 tracking-tighter leading-[0.9]">Batti l'algoritmo.<br/>Conquista il recruiter.</h2>
+                            <p className="text-slate-500 text-xl max-w-3xl mx-auto leading-relaxed">
+                                Ottimizzazione ATS istantanea, 3 template professionali e generazione automatica della lettera di presentazione.
                             </p>
                         </div>
 
-                        {/* LE 3 CARD DINAMICHE (RIPRISTINATE) */}
-                        <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto mb-20">
-                            <div className="step-card">
-                                <div className="w-14 h-14 bg-blue-50 text-[#003B5C] rounded-full flex items-center justify-center mx-auto mb-5 font-black text-2xl shadow-inner">1</div>
-                                <h3 className="font-black text-slate-800 text-xl mb-2">Carica</h3>
-                                <p className="text-sm text-slate-400">Il tuo CV attuale e una foto profilo (opzionale).</p>
-                            </div>
-                            <div className="step-card">
-                                <div className="w-14 h-14 bg-teal-50 text-[#00A19D] rounded-full flex items-center justify-center mx-auto mb-5 font-black text-2xl shadow-inner">2</div>
-                                <h3 className="font-black text-slate-800 text-xl mb-2">Incolla</h3>
-                                <p className="text-sm text-slate-400">Inserisci il link dell'annuncio o il testo della Job Description.</p>
-                            </div>
-                            <div className="step-card">
-                                <div className="w-14 h-14 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-5 font-black text-2xl shadow-inner">3</div>
-                                <h3 className="font-black text-slate-800 text-xl mb-2">Scarica</h3>
-                                <p className="text-sm text-slate-400">Ottieni il tuo CV ottimizzato e pronto per il successo.</p>
-                            </div>
-                        </div>
-
-                        {/* FORM BOX - VERSIONE DEFINITIVA */}
-                        <div className="max-w-4xl mx-auto bg-white p-10 md:p-16 rounded-[60px] shadow-[0_35px_60px_-15px_rgba(0,0,0,0.1)] border border-slate-50">
-                            <div className="grid md:grid-cols-2 gap-8 mb-10">
-                                
-                                {/* BOX UPLOAD CV */}
-                                <div className="space-y-3">
-                                    <label className="text-[12px] font-black text-slate-400 uppercase tracking-[0.2em]">1. Carica il tuo CV (PDF/JPG)</label>
-                                    <div className="relative border-2 border-dashed border-slate-200 rounded-[30px] p-10 text-center bg-slate-50/30 hover:border-[#00A19D] hover:bg-white transition-all group">
-                                        <input 
-                                            type="file" 
-                                            onChange={(e) => setCvFile(e.target.files[0])}
-                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                                        />
-                                        <p className="text-sm font-black text-slate-500 group-hover:text-[#00A19D]">
-                                            {cvFile ? `✅ ${cvFile.name}` : "Seleziona File"}
-                                        </p>
+                        {/* Box Caricamento */}
+                        <div className="max-w-4xl mx-auto bg-white p-10 md:p-20 rounded-[60px] shadow-2xl border border-slate-50 relative overflow-hidden">
+                            {loading && <div className="absolute top-0 left-0 w-full loading-bar"></div>}
+                            
+                            <div className="grid md:grid-cols-2 gap-10 mb-12">
+                                <div className="space-y-4">
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">1. Il tuo CV attuale</label>
+                                    <div className="relative border-2 border-dashed border-slate-200 rounded-[30px] p-12 text-center bg-slate-50/50 hover:border-[#00A19D] transition-all cursor-pointer">
+                                        <input type="file" onChange={(e) => setCvFile(e.target.files[0])} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                        <span className="font-bold text-slate-600">{cvFile ? cvFile.name : "Trascina o Clicca"}</span>
                                     </div>
                                 </div>
-
-                                {/* BOX UPLOAD FOTO */}
-                                <div className="space-y-3">
-                                    <label className="text-[12px] font-black text-slate-400 uppercase tracking-[0.2em]">2. Foto Profilo (Opzionale)</label>
-                                    <div className="relative border-2 border-dashed border-slate-200 rounded-[30px] p-10 text-center bg-slate-50/30 hover:border-[#003B5C] hover:bg-white transition-all group">
-                                        <input 
-                                            type="file" 
-                                            onChange={(e) => setProfilePic(e.target.files[0])}
-                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                                        />
-                                        <p className="text-sm font-black text-slate-500 group-hover:text-[#003B5C]">
-                                            {profilePic ? `✅ Foto pronta` : "Scegli Foto"}
-                                        </p>
+                                <div className="space-y-4">
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">2. Foto Profilo</label>
+                                    <div className="relative border-2 border-dashed border-slate-200 rounded-[30px] p-12 text-center bg-slate-50/50 hover:border-[#003B5C] transition-all cursor-pointer">
+                                        <input type="file" onChange={(e) => setProfilePic(URL.createObjectURL(e.target.files[0]))} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                        <span className="font-bold text-slate-600">{profilePic ? "Foto Caricata!" : "Opzionale"}</span>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* I DUE CAMPI SEPARATI (RIPRISTINATI) */}
                             <div className="space-y-6 mb-12">
-                                <div className="space-y-3">
-                                    <label className="text-[12px] font-black text-slate-400 uppercase tracking-[0.2em]">3. Link Annuncio</label>
-                                    <input 
-                                        type="text" 
-                                        placeholder="Incolla URL dell'annuncio qui..." 
-                                        value={jdUrl}
-                                        onChange={(e) => setJdUrl(e.target.value)}
-                                        className="w-full p-5 bg-slate-50 rounded-2xl border border-slate-100 outline-none focus:ring-2 focus:ring-[#00A19D]/20 focus:border-[#00A19D] transition-all"
-                                    />
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[12px] font-black text-slate-400 uppercase tracking-[0.2em]">O Job Description integrale</label>
-                                    <textarea 
-                                        placeholder="Incolla qui il testo della Job Description..." 
-                                        value={jdText}
-                                        onChange={(e) => setJdText(e.target.value)}
-                                        className="w-full p-5 bg-slate-50 rounded-2xl border border-slate-100 h-40 outline-none focus:ring-2 focus:ring-[#00A19D]/20 focus:border-[#00A19D] transition-all resize-none"
-                                    ></textarea>
-                                </div>
+                                <input type="text" placeholder="URL Annuncio (LinkedIn, Indeed...)" onChange={e => setJdUrl(e.target.value)} className="w-full p-6 bg-slate-50 rounded-2xl border border-slate-100 outline-none focus:border-[#00A19D]" />
+                                <textarea placeholder="O incolla qui la Job Description..." onChange={e => setJdText(e.target.value)} className="w-full p-6 bg-slate-50 rounded-2xl border border-slate-100 h-44 outline-none resize-none"></textarea>
                             </div>
 
-                            <button 
-                                className="w-full bg-[#003B5C] text-white py-6 rounded-3xl font-black text-2xl shadow-2xl hover:bg-[#002b44] hover:scale-[1.01] active:scale-[0.99] transition-all uppercase tracking-tight"
-                            >
-                                Adatta il mio CV ora
+                            <button onClick={handleOptimize} disabled={loading} className="w-full bg-[#003B5C] text-white py-8 rounded-[30px] font-black text-2xl shadow-2xl hover:bg-black transition-all uppercase tracking-tight disabled:opacity-50">
+                                {loading ? "OTTIMIZZAZIONE IN CORSO..." : "ADATTA IL MIO CV ORA"}
                             </button>
                         </div>
                     </main>
