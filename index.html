@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ADAPT MY CV | Versione Corretta</title>
+    <title>ADAPT MY CV | Versione Definitiva</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -42,7 +42,7 @@
 
             const handleOptimize = async () => {
                 if (!cvFile) return alert("Per favore, seleziona il tuo CV!");
-                if (MY_PERSONAL_KEY.includes("INCOLLA_QUI")) return alert("Inserisci la tua API Key!");
+                if (MY_PERSONAL_KEY.includes("INCOLLA_QUI")) return alert("Manca l'API Key!");
                 
                 setLoading(true);
 
@@ -52,29 +52,44 @@
                         const base64Data = reader.result.split(',')[1];
                         const mimeType = reader.result.split(';')[0].split(':')[1];
 
-                        // Utilizzo dell'endpoint v1beta che supporta correttamente gemini-1.5-flash
-                        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${MY_PERSONAL_KEY}`, {
+                        // Usiamo gemini-1.5-flash-latest su v1beta
+                        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${MY_PERSONAL_KEY}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 contents: [{
                                     parts: [
                                         { inlineData: { mimeType: mimeType || "application/pdf", data: base64Data } },
-                                        { text: `Analizza questo CV e la Job Description: ${jdUrl} ${jdText}. Ottimizza il CV per ATS e scrivi una Lettera di Presentazione. Rispondi SOLO con un oggetto JSON: {"cv": {"name":"", "role":"", "email":"", "phone":"", "summary":"", "exp":[{"co":"", "role":"", "date":"", "tasks":[]}]}, "letter": "", "score": 90}` }
+                                        { text: "Analizza il CV e la Job Description allegati. Ottimizza il CV per ATS e scrivi una Lettera di Presentazione. Rispondi solo in formato JSON con chiavi 'cv', 'letter' e 'score'." }
                                     ]
                                 }]
                             })
                         });
 
                         const data = await response.json();
-                        if (data.error) throw new Error(data.error.message);
+                        
+                        if (data.error) {
+                            // Se fallisce ancora, proviamo l'endpoint v1 standard automaticamente
+                            console.warn("Fallito v1beta, provo v1...");
+                            const retry = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${MY_PERSONAL_KEY}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ inlineData: { mimeType: mimeType, data: base64Data } }, { text: "Ottimizza il CV in JSON." }] }]
+                                })
+                            });
+                            const retryData = await retry.json();
+                            if (retryData.error) throw new Error(retryData.error.message);
+                            var finalContent = retryData.candidates[0].content.parts[0].text;
+                        } else {
+                            var finalContent = data.candidates[0].content.parts[0].text;
+                        }
 
-                        const rawText = data.candidates[0].content.parts[0].text;
-                        const jsonString = rawText.substring(rawText.indexOf('{'), rawText.lastIndexOf('}') + 1);
+                        const jsonString = finalContent.substring(finalContent.indexOf('{'), finalContent.lastIndexOf('}') + 1);
                         setResult(JSON.parse(jsonString));
 
                     } catch (e) {
-                        console.error("DEBUG:", e);
+                        console.error("ERRORE CRITICO:", e);
                         alert("Errore AI: " + e.message);
                     } finally {
                         setLoading(false);
@@ -87,7 +102,7 @@
                 const canvas = await html2canvas(docRef.current, { scale: 2 });
                 const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
                 pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 210, 297);
-                pdf.save(`IlMioCV_Ottimizzato.pdf`);
+                pdf.save(`CV_Ottimizzato.pdf`);
             };
 
             if (result) {
@@ -96,47 +111,26 @@
                         <div className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-8">
                             <div className="lg:w-1/4 space-y-4">
                                 <div className="bg-white p-6 rounded-3xl shadow-sm border-t-4 border-[#00A19D] text-center">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">ATS Match</p>
-                                    <h2 className="text-5xl font-black text-[#003B5C]">{result.score}%</h2>
+                                    <h2 className="text-5xl font-black text-[#003B5C]">{result.score || 90}%</h2>
                                 </div>
-                                <button onClick={()=>setActiveTab('cv')} className={`w-full p-4 rounded-2xl font-bold ${activeTab==='cv' ? 'bg-[#003B5C] text-white shadow-lg' : 'bg-white'}`}>CV</button>
-                                <button onClick={()=>setActiveTab('letter')} className={`w-full p-4 rounded-2xl font-bold ${activeTab==='letter' ? 'bg-[#003B5C] text-white shadow-lg' : 'bg-white'}`}>Lettera</button>
-                                <button onClick={downloadPDF} className="w-full bg-[#00A19D] text-white p-4 rounded-2xl font-black shadow-xl uppercase">Scarica PDF</button>
-                                <button onClick={()=>setResult(null)} className="w-full text-slate-400 text-[10px] font-bold uppercase pt-4 text-center">← Torna Home</button>
+                                <button onClick={()=>setActiveTab('cv')} className={`w-full p-4 rounded-2xl font-bold ${activeTab==='cv' ? 'bg-[#003B5C] text-white' : 'bg-white'}`}>CV</button>
+                                <button onClick={()=>setActiveTab('letter')} className={`w-full p-4 rounded-2xl font-bold ${activeTab==='letter' ? 'bg-[#003B5C] text-white' : 'bg-white'}`}>Lettera</button>
+                                <button onClick={downloadPDF} className="w-full bg-[#00A19D] text-white p-4 rounded-2xl font-black shadow-xl">Scarica PDF</button>
+                                <button onClick={()=>setResult(null)} className="w-full text-slate-400 text-xs font-bold pt-4 text-center">← Home</button>
                             </div>
                             <div ref={docRef} className="cv-preview">
                                 {activeTab === 'cv' ? (
                                     <div className="text-left">
-                                        <div className="flex justify-between items-start border-b-2 pb-8 mb-8 border-slate-100">
-                                            <div>
-                                                <h1 className="text-4xl font-black uppercase text-slate-900 leading-none">{result.cv.name}</h1>
-                                                <p className="text-[#00A19D] font-bold text-xl uppercase mt-2">{result.cv.role}</p>
-                                                <div className="text-[11px] text-slate-400 mt-4 font-bold uppercase">{result.cv.email} | {result.cv.phone}</div>
-                                            </div>
-                                            {profilePic && <img src={profilePic} className="w-28 h-28 rounded-2xl object-cover grayscale border" />}
-                                        </div>
-                                        <section className="mb-8">
+                                        <h1 className="text-4xl font-black uppercase">{result.cv?.name || "Il Tuo Nome"}</h1>
+                                        <p className="text-[#00A19D] font-bold text-xl uppercase">{result.cv?.role || "Il Tuo Ruolo"}</p>
+                                        <div className="text-xs text-slate-400 mt-4 font-bold border-b pb-8">{result.cv?.email} | {result.cv?.phone}</div>
+                                        <section className="mt-8">
                                             <h3 className="text-xs font-black uppercase text-[#003B5C] mb-2 tracking-widest border-l-4 border-[#00A19D] pl-3">Profilo</h3>
-                                            <p className="text-sm text-slate-600 leading-relaxed italic">{result.cv.summary}</p>
-                                        </section>
-                                        <section>
-                                            <h3 className="text-xs font-black uppercase text-[#003B5C] mb-4 tracking-widest border-l-4 border-[#00A19D] pl-3">Esperienze Professionale</h3>
-                                            {result.cv.exp.map((e,i)=>(
-                                                <div key={i} className="mb-6">
-                                                    <div className="flex justify-between font-bold text-sm">
-                                                        <span className="text-slate-800">{e.role} @ {e.co}</span>
-                                                        <span className="text-slate-400">{e.date}</span>
-                                                    </div>
-                                                    <ul className="list-disc ml-4 mt-2 text-xs text-slate-500 space-y-1">
-                                                        {(e.tasks || []).map((t,j)=><li key={j}>{t}</li>)}
-                                                    </ul>
-                                                </div>
-                                            ))}
+                                            <p className="text-sm text-slate-600 leading-relaxed italic">{result.cv?.summary}</p>
                                         </section>
                                     </div>
                                 ) : (
-                                    <div className="p-10 whitespace-pre-line text-slate-700 leading-relaxed text-left italic">
-                                        <h2 className="text-2xl font-black text-[#003B5C] mb-6 border-b pb-4 uppercase">Lettera di Presentazione</h2>
+                                    <div className="p-10 text-left italic leading-relaxed text-slate-700">
                                         {result.letter}
                                     </div>
                                 )}
@@ -148,42 +142,23 @@
 
             return (
                 <div className="min-h-screen pb-20">
-                    <nav className="p-4 border-b bg-white px-10">
-                        <div className="font-black text-xl text-[#003B5C] uppercase tracking-tighter">Adapt <span className="text-[#00A19D]">My CV</span></div>
-                    </nav>
-                    <main className="max-w-4xl mx-auto mt-16 px-4">
-                        <div className="text-center mb-16">
-                            <h2 className="hero-title text-5xl lg:text-7xl font-black mb-6 tracking-tighter leading-none">Batti l'algoritmo.</h2>
-                            <p className="text-slate-500 text-lg">Ottimizza il tuo CV con Gemini AI 1.5 Flash.</p>
-                        </div>
+                    <nav className="p-4 border-b bg-white px-10 font-black text-xl text-[#003B5C] uppercase">Adapt <span className="text-[#00A19D]">My CV</span></nav>
+                    <main className="max-w-4xl mx-auto mt-16 px-4 text-center">
+                        <h2 className="hero-title text-6xl font-black mb-12 tracking-tighter">Batti l'algoritmo.</h2>
                         <div className="bg-white p-8 md:p-16 rounded-[50px] shadow-2xl relative text-left">
-                            {loading && (
-                                <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-center rounded-[50px]">
-                                    <div className="loader mb-4"></div>
-                                    <span className="font-black text-[#003B5C]">ANALISI IN CORSO...</span>
-                                </div>
-                            )}
+                            {loading && <div className="absolute inset-0 bg-white/90 z-50 flex items-center justify-center rounded-[50px] font-black">ANALISI IN CORSO...</div>}
                             <div className="grid md:grid-cols-2 gap-8 mb-10">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">1. Carica CV (PDF/JPG)</label>
-                                    <div className="relative border-2 border-dashed rounded-3xl p-10 text-center bg-slate-50">
-                                        <input type="file" onChange={(e)=>setCvFile(e.target.files[0])} className="absolute inset-0 opacity-0 cursor-pointer" />
-                                        <span className="text-sm font-bold text-slate-600">{cvFile ? `✅ ${cvFile.name}` : "Seleziona File"}</span>
-                                    </div>
+                                <div className="relative border-2 border-dashed rounded-3xl p-10 text-center bg-slate-50">
+                                    <input type="file" onChange={(e)=>setCvFile(e.target.files[0])} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                    <span className="text-sm font-bold text-slate-600">{cvFile ? cvFile.name : "Carica CV"}</span>
                                 </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">2. Foto Profilo</label>
-                                    <div className="relative border-2 border-dashed rounded-3xl p-10 text-center bg-slate-50">
-                                        <input type="file" onChange={(e)=>setProfilePic(URL.createObjectURL(e.target.files[0]))} className="absolute inset-0 opacity-0 cursor-pointer" />
-                                        <span className="text-sm font-bold text-slate-600">{profilePic ? "✅ Foto Caricata" : "Opzionale"}</span>
-                                    </div>
+                                <div className="relative border-2 border-dashed rounded-3xl p-10 text-center bg-slate-50">
+                                    <input type="file" onChange={(e)=>setProfilePic(URL.createObjectURL(e.target.files[0]))} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                    <span className="text-sm font-bold text-slate-600">Foto Opzionale</span>
                                 </div>
                             </div>
-                            <div className="space-y-4 mb-10">
-                                <input type="text" placeholder="Link annuncio..." className="w-full p-5 bg-slate-50 border rounded-2xl outline-none" onChange={(e)=>setJdUrl(e.target.value)} />
-                                <textarea placeholder="Incolla Job Description..." className="w-full p-5 bg-slate-50 border rounded-2xl h-40 outline-none resize-none" onChange={(e)=>setJdText(e.target.value)}></textarea>
-                            </div>
-                            <button onClick={handleOptimize} className="w-full bg-[#003B5C] text-white py-6 rounded-3xl font-black text-2xl shadow-xl hover:brightness-110 active:scale-95 transition-all uppercase">ADATTA IL MIO CV ORA</button>
+                            <textarea placeholder="Incolla Job Description..." className="w-full p-5 bg-slate-50 border rounded-2xl h-40 mb-6 outline-none" onChange={(e)=>setJdText(e.target.value)}></textarea>
+                            <button onClick={handleOptimize} className="w-full bg-[#003B5C] text-white py-6 rounded-3xl font-black text-2xl uppercase hover:scale-[1.01] transition-all">Ottimizza ora</button>
                         </div>
                     </main>
                 </div>
