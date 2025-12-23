@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ADAPT MY CV | Batti l'algoritmo</title>
-    
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -13,7 +12,7 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #F8FAFC; color: #1E293B; }
         .hero-title { background: linear-gradient(to right, #003B5C, #00A19D); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .step-card { background: white; padding: 1.5rem; border-radius: 1.5rem; border: 1px solid #e2e8f0; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        .step-card { background: white; padding: 1.5rem; border-radius: 1.5rem; border: 1px solid #e2e8f0; text-align: center; }
     </style>
 </head>
 <body>
@@ -25,6 +24,7 @@
         const App = () => {
             const [cvFile, setCvFile] = useState(null);
             const [profilePic, setProfilePic] = useState(null);
+            const [jdText, setJdText] = useState('');
 
             return (
                 <div className="min-h-screen pb-20">
@@ -36,61 +36,66 @@
                     </nav>
 
                     <main className="container mx-auto px-4 mt-16 max-w-5xl">
-                        {/* SEZIONE TITOLO E SOTTOTITOLO INTEGRALE */}
                         <div className="text-center mb-16">
                             <h2 className="hero-title text-5xl lg:text-7xl font-black mb-6 tracking-tighter">
                                 Batti l'algoritmo.<br/>Conquista il recruiter.
                             </h2>
                             <p className="text-slate-500 text-lg lg:text-xl max-w-3xl mx-auto leading-relaxed">
                                 Il 75% dei CV viene scartato dai filtri ATS prima di essere visto da un umano. 
-                                La nostra AI ottimizza il tuo CV per ogni annuncio a cui desideri candidarti 
-                                in tempo reale per garantirti il massimo della visibilità.
+                                La nostra AI ottimizza il tuo CV per ogni annuncio in tempo reale.
                             </p>
                         </div>
 
-                        {/* BOX 3 STEP */}
-                        <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-16">
-                            <div className="step-card">
-                                <div className="w-12 h-12 bg-blue-50 text-[#003B5C] rounded-full flex items-center justify-center mx-auto mb-4 font-black text-xl">1</div>
-                                <h3 className="font-bold text-slate-800 text-lg">Carica</h3>
-                                <p className="text-sm text-slate-400 mt-1">CV e foto profilo.</p>
-                            </div>
-                            <div className="step-card">
-                                <div className="w-12 h-12 bg-teal-50 text-[#00A19D] rounded-full flex items-center justify-center mx-auto mb-4 font-black text-xl">2</div>
-                                <h3 className="font-bold text-slate-800 text-lg">Incolla</h3>
-                                <p className="text-sm text-slate-400 mt-1">URL o testo dell'annuncio.</p>
-                            </div>
-                            <div className="step-card">
-                                <div className="w-12 h-12 bg-slate-50 text-slate-600 rounded-full flex items-center justify-center mx-auto mb-4 font-black text-xl">3</div>
-                                <h3 className="font-bold text-slate-800 text-lg">Scarica</h3>
-                                <p className="text-sm text-slate-400 mt-1">Il tuo CV pronto per il successo.</p>
-                            </div>
-                        </div>
-
-                        {/* FORM BOX ARROTONDATO */}
+                        {/* FORM BOX */}
                         <div className="max-w-3xl mx-auto bg-white p-8 md:p-12 rounded-[50px] shadow-2xl border border-slate-50">
                             <div className="grid md:grid-cols-2 gap-6 mb-8">
+                                
+                                {/* CARICA CV - FUNZIONANTE */}
                                 <div className="space-y-2">
                                     <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">1. Carica il tuo CV (PDF/JPG)</label>
-                                    <div className="border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center bg-slate-50/50">
-                                        <p className="text-sm font-bold text-slate-400">Seleziona File</p>
+                                    <div className="relative border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center bg-slate-50/50 hover:border-[#00A19D] transition-colors">
+                                        <input 
+                                            type="file" 
+                                            accept=".pdf,.jpg,.jpeg,.png"
+                                            onChange={(e) => setCvFile(e.target.files[0])}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                        />
+                                        <p className="text-sm font-bold text-slate-600">
+                                            {cvFile ? `✅ ${cvFile.name}` : "Seleziona File"}
+                                        </p>
                                     </div>
                                 </div>
+
+                                {/* CARICA FOTO - FUNZIONANTE */}
                                 <div className="space-y-2">
                                     <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">2. Foto Profilo (Opzionale)</label>
-                                    <div className="border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center bg-slate-50/50">
-                                        <p className="text-sm font-bold text-slate-400">Scegli Foto</p>
+                                    <div className="relative border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center bg-slate-50/50 hover:border-[#00A19D] transition-colors">
+                                        <input 
+                                            type="file" 
+                                            accept="image/*"
+                                            onChange={(e) => setProfilePic(e.target.files[0])}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                        />
+                                        <p className="text-sm font-bold text-slate-600">
+                                            {profilePic ? `✅ Foto selezionata` : "Scegli Foto"}
+                                        </p>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="space-y-2 mb-8">
-                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">3. Link Annuncio</label>
-                                <input type="text" placeholder="Incolla URL..." className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 mb-4" />
-                                <textarea placeholder="O incolla il testo qui..." className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 h-32"></textarea>
+                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">3. Link o Testo Annuncio</label>
+                                <textarea 
+                                    placeholder="Incolla qui la Job Description..." 
+                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 h-32 outline-none focus:border-[#00A19D]"
+                                    onChange={(e) => setJdText(e.target.value)}
+                                ></textarea>
                             </div>
 
-                            <button className="w-full bg-[#003B5C] text-white py-5 rounded-[20px] font-black text-xl shadow-lg uppercase tracking-tight">
+                            <button 
+                                onClick={() => alert("AI in fase di elaborazione...")}
+                                className="w-full bg-[#003B5C] text-white py-5 rounded-[20px] font-black text-xl shadow-lg uppercase tracking-tight hover:opacity-90 transition-opacity"
+                            >
                                 Adatta il mio CV ora
                             </button>
                         </div>
